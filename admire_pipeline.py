@@ -66,7 +66,7 @@ def resolve_image_paths(candidates: list[dict], image_dir: str):
             cand["image_path"] = "NOT_FOUND"
 
 
-def process_row(row: dict, image_dir: str) -> tuple[str, dict]:
+def process_row(row: dict, image_dir: str, lang: str) -> tuple[str, dict]:
     sentence   = row["sentence"]
     compound   = row["compound"]
     candidates = row["candidates"]
@@ -78,7 +78,7 @@ def process_row(row: dict, image_dir: str) -> tuple[str, dict]:
     resolve_image_paths(candidates, image_dir)
 
     # 1. Idiom Detection
-    idiom = detect_idiom(sentence, compound)
+    idiom = detect_idiom(sentence, compound,lang)
     is_idiomatic = idiom["is_idiomatic"]
 
     # 2. Context Extraction
@@ -87,6 +87,7 @@ def process_row(row: dict, image_dir: str) -> tuple[str, dict]:
         phrase=compound,
         candidates=candidates,
         is_idiomatic=is_idiomatic,
+        lang=lang,
         wiktionary_def=idiom.get("wiktionary_def")
     )
 
@@ -134,7 +135,8 @@ def main():
     parser.add_argument("--image_dir", default=DEFAULT_IMAGE_DIR, help="Folder with image files")
     parser.add_argument("--output",    default=DEFAULT_OUTPUT,    help="Output TSV path")
     parser.add_argument("--limit",     type=int, default=None,    help="Process only first N rows")
-    parser.add_argument("--threads",   type=int, default=10,      help="Paralel thread sayısı (default: 10)")
+    parser.add_argument("--threads",   type=int, default=10,      help="Parallel thread number (default: 10)")
+    parser.add_argument("--lang", type=str, default="TR", help="Language short code (e.g. TR, UZ, KA)")
     args = parser.parse_args()
 
     if not os.environ.get("GROQ_API_KEY"):
@@ -151,7 +153,7 @@ def main():
 
     def worker(i, row):
         try:
-            order, debug_info = process_row(row, args.image_dir)
+            order, debug_info = process_row(row, args.image_dir,args.lang)
             return i, order, debug_info
         except Exception as e:
             print(f"\n  [Error] Row {row['row_index']}: {e}")

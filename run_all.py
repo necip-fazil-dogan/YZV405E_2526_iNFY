@@ -3,20 +3,20 @@ import subprocess
 from pathlib import Path
 
 
-os.environ["GROQ_API_KEY"]       = ""   
-os.environ["OPENROUTER_API_KEY"] = ""   
+os.environ["GROQ_API_KEY"]       = "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"   
+os.environ["OPENROUTER_API_KEY"] = "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"   
 
 
-THREADS = 3   
+THREADS = 10 
 
 
 LANGUAGES = [
     ["Turkish","TR"],
     #["Chinese","ZH"],
-    #["Georgian","KA"],
+    ["Georgian","KA"],
     #["Greek","EL"],
-    #["Igbo","IG"],
-    #["Kazakh","KK"],
+    ["Igbo","IG"],
+    ["Kazakh","KK"],
     #["Norwegian","NO"],
     #["Portuguese-Brazil","PT-BR"],
     #["Portuguese-Portugal","PT-PT"],
@@ -25,7 +25,6 @@ LANGUAGES = [
     #["Slovak","SK"],
     #["Slovenian","SL"],
     #["Spanish-Ecuador","ES-EC"],
-    #["Turkish","TR"],
     #["Uzbek","UZ"]
 ]
 
@@ -59,7 +58,9 @@ for lang in LANGUAGES:
          "--tsv",       tsv,
          "--image_dir", imgs,
          "--output",    out,
-         "--threads",   str(THREADS)],env=os.environ
+         "--threads",   str(THREADS),
+         "--lang", lang[1]],env=os.environ,
+         
     )
 
     if result.returncode == 0:
