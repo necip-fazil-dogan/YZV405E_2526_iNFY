@@ -1,14 +1,22 @@
 import os
 import json
 import torch
+import numpy as np
+import requests
 from PIL import Image
-from groq import Groq
 from transformers import AutoProcessor, AutoModelForZeroShotObjectDetection
 import time
 
+try:
+    from modules.idiom_detection import bge_model as _bge_model
+except ImportError:
+    from idiom_detection import bge_model as _bge_model
+
 # ── Config & Model Initialization ────────────────────────────────────────────
 
-GROQ_API_KEY = "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"
+OPENROUTER_API_KEY = os.environ.get("OPENROUTER_API_KEY", "")
+TEXT_MODEL         = "meta-llama/llama-4-scout-17b-16e-instruct"
+OPENROUTER_URL     = "https://openrouter.ai/api/v1/chat/completions"
 
 # GroundingDINO'yu global olarak başlatıyoruz ki her görselde baştan yüklenmesin
 device = "cuda" if torch.cuda.is_available() else "cpu"
@@ -22,28 +30,41 @@ except Exception as e:
 
 
 
-def _groq_call(system: str, user: str, max_tokens: int = 50) -> str:
-    for attempt in range(10): 
+def _openrouter_text_call(system: str, user: str, max_tokens: int = 50) -> str:
+    if not OPENROUTER_API_KEY:
+        raise EnvironmentError("OPENROUTER_API_KEY is not set.")
+
+    headers = {
+        "Authorization": f"Bearer {OPENROUTER_API_KEY}",
+        "Content-Type":  "application/json",
+        "HTTP-Referer":  "https://github.com/admire-pipeline",
+    }
+    payload = {
+        "model": TEXT_MODEL,
+        "messages": [
+            {"role": "system", "content": system},
+            {"role": "user",   "content": user},
+        ],
+        "max_tokens":  max_tokens,
+        "temperature": 0.0,
+    }
+
+    for attempt in range(10):
         try:
-            client = Groq(api_key=GROQ_API_KEY)
-            resp = client.chat.completions.create(
-                model="llama-3.1-8b-instant",
-                messages=[
-                    {"role": "system", "content": system},
-                    {"role": "user", "content": user},
-                ],
-                max_tokens=max_tokens,
-                temperature=0.0,
-            )
-            time.sleep(2) 
-            return resp.choices[0].message.content.strip()
-        except Exception as e:
-            if "429" in str(e):
-                wait = 2 * (attempt + 1)  
-                print(f"[Groq] Rate limit, {wait}s wait...")
+            r = requests.post(OPENROUTER_URL, headers=headers, json=payload, timeout=60)
+            if r.status_code == 429:
+                wait = 2 * (attempt + 1)
+                print(f"[OpenRouter] Rate limit, {wait}s bekleniyor...")
                 time.sleep(wait)
-            else:
-                raise
+                continue
+            r.raise_for_status()
+            return r.json()["choices"][0]["message"]["content"].strip()
+        except requests.exceptions.HTTPError:
+            raise
+        except Exception as e:
+            wait = 2 * (attempt + 1)
+            print(f"[OpenRouter] Hata ({e}), {wait}s sonra tekrar...")
+            time.sleep(wait)
     return ""
 
 
@@ -104,7 +125,7 @@ def paraphrase_sentence(sentence: str, phrase: str, lang: str) -> str:
         "Paraphrase this sentence with the same meaning but different words. "
         "Short answer only."
     )
-    result = _groq_call(system, user, max_tokens=80)
+    result = _openrouter_text_call(system, user, max_tokens=80)
     print(f"[Paraphrase] {result}")
     return result
 
@@ -125,7 +146,7 @@ def extract_atmosphere(sentence: str, phrase: str) -> str:
         "What atmospheric or emotional situation does this phrase evoke? "
         "Answer in just a few words."
     )
-    result = _groq_call(system, user, max_tokens=30)
+    result = _openrouter_text_call(system, user, max_tokens=30)
     print(f"[Atmosphere] {result}")
     return result
 
@@ -138,7 +159,7 @@ def extract_physical_objects(phrase: str) -> str:
         "Return them as a comma-separated list. No explanations, no extra words.\n"
     )
     user = f'Phrase: "{phrase}"'
-    result = _groq_call(system, user, max_tokens=20)
+    result = _openrouter_text_call(system, user, max_tokens=20)
     print(f"[PhysicalObjects] '{phrase}' -> {result}")
     return result
 
@@ -194,6 +215,32 @@ def grounding_dino_penalty_batch(
     return penalties
 
 
+def compute_caption_similarities(
+    match_query: str,
+    candidates: list[dict],
+) -> dict[str, float]:
+    """
+    BGE-M3 cosine similarity between match_query and each candidate's caption.
+    Returns {image_id: similarity_score} in range [0, 1].
+    """
+    if not match_query:
+        return {c["image_id"]: 0.0 for c in candidates}
+
+    query_vec = _bge_model.encode(match_query, normalize_embeddings=True)
+    sims = {}
+    for cand in candidates:
+        caption = cand.get("caption", "").strip()
+        if not caption:
+            sims[cand["image_id"]] = 0.0
+            continue
+        cap_vec = _bge_model.encode(caption, normalize_embeddings=True)
+        sim = float(np.dot(query_vec, cap_vec))
+        sim = max(0.0, sim)
+        sims[cand["image_id"]] = round(sim, 4)
+        print(f"[CaptionSim] {cand.get('image_name', cand['image_id'])} → {sim:.4f}")
+    return sims
+
+
 def extract_context(
     sentence: str,
     phrase: str,
@@ -207,10 +254,11 @@ def extract_context(
 
     Returns:
         {
-          "paraphrase":   str,    # plain-language restatement
-          "atmosphere":   str,    # emotional/atmospheric keywords
-          "penalties":    dict,   # {image_id: float} literal grounding penalty
-          "match_query":  str,    # query to use in tournament
+          "paraphrase":    str,   # plain-language restatement
+          "atmosphere":    str,   # emotional/atmospheric keywords
+          "penalties":     dict,  # {image_id: float} literal grounding penalty
+          "match_query":   str,   # query to use in tournament
+          "caption_sims":  dict,  # {image_id: float} BGE-M3 caption similarity
         }
     """
     print(f"\n[ContextExtract] sentence='{sentence}' | idiomatic={is_idiomatic}")
@@ -218,28 +266,39 @@ def extract_context(
     penalties = grounding_dino_penalty_batch(candidates, physical_query)
 
     if not is_idiomatic:
+        match_query = f"Phrase: '{phrase}'. Context: {sentence}"
+        caption_sims = compute_caption_similarities(match_query, candidates)
         return {
-            "paraphrase":  phrase,
-            "atmosphere":  "",
-            "penalties":   penalties,
-            "match_query": phrase,
+            "paraphrase":   phrase,
+            "atmosphere":   "",
+            "penalties":    penalties,
+            "match_query":  match_query,
+            "caption_sims": caption_sims,
         }
 
     if wiktionary_def:
         paraphrase = wiktionary_def
         print(f"[ContextExtract] Using Wiktionary def as paraphrase: {paraphrase[:60]}")
     else:
-        paraphrase = paraphrase_sentence(sentence, phrase,lang)
+        paraphrase = paraphrase_sentence(sentence, phrase, lang)
 
     atmosphere = extract_atmosphere(sentence, phrase)
 
-    match_query = f"{paraphrase}. Atmosphere: {atmosphere}"
+    match_query = (
+        f"Phrase: '{phrase}'. "
+        f"Context: {sentence}. "
+        f"Meaning: {paraphrase}. "
+        f"Atmosphere: {atmosphere}"
+    )
+
+    caption_sims = compute_caption_similarities(match_query, candidates)
 
     return {
-        "paraphrase":  paraphrase,
-        "atmosphere":  atmosphere,
-        "penalties":   penalties,
-        "match_query": match_query,
+        "paraphrase":   paraphrase,
+        "atmosphere":   atmosphere,
+        "penalties":    penalties,
+        "match_query":  match_query,
+        "caption_sims": caption_sims,
     }
 
 

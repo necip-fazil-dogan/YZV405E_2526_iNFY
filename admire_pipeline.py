@@ -96,13 +96,15 @@ def process_row(row: dict, image_dir: str, lang: str) -> tuple[str, dict]:
         candidates=candidates,
         match_query=ctx["match_query"],
         penalties=ctx["penalties"],
+        caption_sims=ctx["caption_sims"],
         is_idiomatic=is_idiomatic,
         image_dir=image_dir,
     )
 
     id_to_name = {c["image_id"]: c["image_name"] for c in candidates}
     ordered_names = [id_to_name[r["image_id"]] for r in ranked]
-    result = json.dumps(ordered_names, ensure_ascii=False)
+    # Girdi formatıyla aynı: tek tırnaklı Python liste string'i (JSON değil; TSV kaçışı bozulmasın)
+    result = str(ordered_names)
     print(f"[Result] {result}")
 
     debug_info = {
@@ -113,13 +115,17 @@ def process_row(row: dict, image_dir: str, lang: str) -> tuple[str, dict]:
         "confidence": idiom["confidence"],
         "paraphrase": ctx["paraphrase"],
         "atmosphere": ctx["atmosphere"],
+        "match_query": ctx["match_query"],
         "penalties": ctx["penalties"],
+        "caption_sims": ctx["caption_sims"],
         "final_ranking": [
             {
-                "image_name": r["image_name"], 
-                "wins": r["wins"], 
-                "penalty": r["penalty"], 
-                "score": r["score"]
+                "image_name": r["image_name"],
+                "wins":       r["wins"],
+                "dino_score": r["dino_score"],
+                "cap_sim":    r["cap_sim"],
+                "penalty":    r["penalty"],
+                "score":      r["score"],
             }
             for r in ranked
         ]
@@ -139,8 +145,8 @@ def main():
     parser.add_argument("--lang", type=str, default="TR", help="Language short code (e.g. TR, UZ, KA)")
     args = parser.parse_args()
 
-    if not os.environ.get("GROQ_API_KEY"):
-        print("Error: GROQ_API_KEY is not set.")
+    if not os.environ.get("OPENROUTER_API_KEY"):
+        print("Error: OPENROUTER_API_KEY is not set.")
         sys.exit(1)
 
     rows = parse_tsv(args.tsv)
@@ -157,7 +163,7 @@ def main():
             return i, order, debug_info
         except Exception as e:
             print(f"\n  [Error] Row {row['row_index']}: {e}")
-            order = " ".join(c["image_name"] for c in row["candidates"])
+            order = str([c["image_name"] for c in row["candidates"]])
             return i, order, {"row_index": row["row_index"], "error": str(e)}
 
     out_path = Path(args.output)

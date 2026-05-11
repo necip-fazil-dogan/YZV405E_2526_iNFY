@@ -5,8 +5,10 @@ import requests
 from pathlib import Path
 
 LAMBDA_PENALTY   = 1.5
-OPENROUTER_API_KEY = "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"
-MODEL            = "qwen/qwen3-vl-8b-instruct"
+LITERAL_BONUS    = 0.8   # GroundingDINO bonus for literal sentences
+CAPTION_WEIGHT   = 0.5   # BGE-M3 caption similarity bonus weight
+OPENROUTER_API_KEY = os.environ.get("OPENROUTER_API_KEY", "")
+MODEL            = "qwen/qwen2.5-vl-72b-instruct"
 API_URL          = "https://openrouter.ai/api/v1/chat/completions"
 
 
@@ -93,23 +95,23 @@ def qwen_pairwise_compare(
     if is_idiomatic:
         system = (
             "You are a multimodal image ranking assistant. "
-            "You will be shown two images (or descriptions) and the actual, real-world meaning of an idiom. "
-            "Decide which image best depicts this real-world human situation, context, and its underlying atmosphere. "
-            "CRITICAL INSTRUCTION: Reject images that show literal animal metaphors, surreal objects, or cartoons. "
-            "Focus strictly on the human and environmental reality described in the text. "
+            "You will be shown two images and the real-world situation described by an idiom. "
+            "Select the image that better captures the MEANING and EMOTIONAL CONTEXT — "
+            "not the literal words of the phrase. "
+            "An image showing the figurative human situation beats one showing the literal objects in the phrase. "
             "Reply ONLY with a single letter: A or B."
         )
-        query_prefix = f"Real-world situation and atmosphere to match: {match_query}\n\n"
-        question     = "Which image (A or B) better depicts this real-world situation? Answer only A or B."
+        query_prefix = f"Real-world meaning and atmosphere to match:\n{match_query}\n\n"
+        question     = "Which image (A or B) better depicts this real-world situation and its emotional context? Answer only A or B."
     else:
         system = (
             "You are a multimodal image ranking assistant. "
-            "You will be shown two images (or descriptions) and a phrase. "
-            "Decide which image more directly and literally depicts the phrase. "
+            "You will be shown two images and a phrase used in its literal, physical sense. "
+            "Decide which image more directly and concretely shows the objects or actions described. "
             "Reply ONLY with a single letter: A or B."
         )
-        query_prefix = f"Phrase to match literally: {match_query}\n\n"
-        question     = "Which image (A or B) more literally depicts this phrase? Answer only A or B."
+        query_prefix = f"Literal phrase and context to match:\n{match_query}\n\n"
+        question     = "Which image (A or B) more literally and directly depicts this phrase? Answer only A or B."
 
     user_content = _build_user_content(path_a, path_b, cand_a, cand_b, query_prefix, question)
 
@@ -151,6 +153,7 @@ def run_tournament_v2(
     candidates:   list[dict],
     match_query:  str,
     penalties:    dict[str, float],
+    caption_sims: dict[str, float],
     is_idiomatic: bool,
     image_dir:    str | None = None,
 ) -> tuple[list[dict], list[dict]]:
@@ -176,19 +179,40 @@ def run_tournament_v2(
 
     results = []
     for idx, c in enumerate(candidates):
-        iid     = c["image_id"]
-        w       = wins[iid]
-        penalty = penalties.get(iid, 0.0) if is_idiomatic else 0.0
-        tie_breaker_epsilon = (n - idx) * 0.001 
-        
-        score = w - (LAMBDA_PENALTY * penalty) + tie_breaker_epsilon
+        iid          = c["image_id"]
+        w            = wins[iid]
+        dino_score   = penalties.get(iid, 0.0)
+        cap_sim      = caption_sims.get(iid, 0.0)
+        tie_epsilon  = (n - idx) * 0.001
+
+        if is_idiomatic:
+            # Literal nesneleri gösteren görseller cezalandırılır
+            score = (
+                w
+                - (LAMBDA_PENALTY * dino_score)
+                + (CAPTION_WEIGHT * cap_sim)
+                + tie_epsilon
+            )
+            penalty_display = round(dino_score, 3)
+        else:
+            # Literal nesneleri gösteren görseller ödüllendirilir
+            score = (
+                w
+                + (LITERAL_BONUS * dino_score)
+                + (CAPTION_WEIGHT * cap_sim)
+                + tie_epsilon
+            )
+            penalty_display = 0.0
+
         results.append({
-            "image_id":   iid,
-            "image_name": c.get("image_name", ""),
-            "caption":    c.get("caption", ""),
-            "wins":       w,
-            "penalty":    round(penalty, 3),
-            "score":      round(score, 4),
+            "image_id":    iid,
+            "image_name":  c.get("image_name", ""),
+            "caption":     c.get("caption", ""),
+            "wins":        w,
+            "dino_score":  round(dino_score, 3),
+            "penalty":     penalty_display,
+            "cap_sim":     round(cap_sim, 4),
+            "score":       round(score, 4),
         })
 
     results.sort(key=lambda x: (x["score"], x["wins"]), reverse=True)
@@ -210,16 +234,18 @@ if __name__ == "__main__":
         {"image_id": "img5", "image_name": "99148916362.png", "caption": "A stylized cartoon chicken with a ruffled white and orange body."},
     ]
 
-    penalties = {"img1": 0.0, "img2": 0.0, "img3": 0.0, "img4": 0.0, "img5": 0.0}
+    penalties    = {"img1": 0.0, "img2": 0.0, "img3": 0.0, "img4": 0.0, "img5": 0.0}
+    caption_sims = {"img1": 0.0, "img2": 0.0, "img3": 0.0, "img4": 0.0, "img5": 0.0}
 
     print("\n" + "="*60)
-    print("TURNUVA BAŞLIYOR (Qwen2.5-VL-3B via OpenRouter)")
+    print("TURNUVA BAŞLIYOR (Qwen2.5-VL-72B via OpenRouter)")
     print("="*60)
 
     results, match_log = run_tournament_v2(
         candidates   = test_candidates,
         match_query  = test_query,
         penalties    = penalties,
+        caption_sims = caption_sims,
         is_idiomatic = True,
         image_dir    = test_dir,
     )
