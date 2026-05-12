@@ -35,7 +35,6 @@ def normalize_expected_order(cell: str) -> str:
             pass
     if isinstance(parsed, list) and all(isinstance(x, str) for x in parsed):
         return format_expected_order_like_legacy(parsed)
-    # Pipeline hata yedeği veya eski çıktı: "a.png b.png c.png"
     parts = s.split()
     if parts and all(_is_image_filename_token(p) for p in parts):
         return format_expected_order_like_legacy(parts)
@@ -65,7 +64,6 @@ def main() -> None:
 
     with args.new.open(newline="", encoding="utf-8") as f:
         new_rows = list(csv.DictReader(f, delimiter="\t"))
-    # Aynı (compound, sentence) birden fazlaysa sondaki geçerli
     new_by_key: dict[tuple[str, str], dict] = {}
     for r in new_rows:
         new_by_key[row_key(r)] = r

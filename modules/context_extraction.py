@@ -18,15 +18,14 @@ OPENROUTER_API_KEY = os.environ.get("OPENROUTER_API_KEY", "")
 TEXT_MODEL         = "meta-llama/llama-4-scout-17b-16e-instruct"
 OPENROUTER_URL     = "https://openrouter.ai/api/v1/chat/completions"
 
-# GroundingDINO'yu global olarak başlatıyoruz ki her görselde baştan yüklenmesin
 device = "cuda" if torch.cuda.is_available() else "cpu"
-print(f"[GroundingDINO] Model {device.upper()} üzerinde başlatılıyor...")
+print(f"[GroundingDINO] Model {device.upper()} is starting...")
 
 try:
     dino_processor = AutoProcessor.from_pretrained("IDEA-Research/grounding-dino-base")
     dino_model = AutoModelForZeroShotObjectDetection.from_pretrained("IDEA-Research/grounding-dino-base").to(device)
 except Exception as e:
-    print(f"[GroundingDINO] Yükleme hatası: {e}\nLütfen internet bağlantınızı kontrol edin veya kütüphaneleri güncelleyin.")
+    print(f"[GroundingDINO] Error: {e}\nPlease check your internet connection or update the libraries.")
 
 
 
@@ -54,7 +53,7 @@ def _openrouter_text_call(system: str, user: str, max_tokens: int = 50) -> str:
             r = requests.post(OPENROUTER_URL, headers=headers, json=payload, timeout=60)
             if r.status_code == 429:
                 wait = 2 * (attempt + 1)
-                print(f"[OpenRouter] Rate limit, {wait}s bekleniyor...")
+                print(f"[OpenRouter] Rate limit, {wait}s waiting...")
                 time.sleep(wait)
                 continue
             r.raise_for_status()
@@ -63,7 +62,7 @@ def _openrouter_text_call(system: str, user: str, max_tokens: int = 50) -> str:
             raise
         except Exception as e:
             wait = 2 * (attempt + 1)
-            print(f"[OpenRouter] Hata ({e}), {wait}s sonra tekrar...")
+            print(f"[OpenRouter] Error ({e}), {wait}s later...")
             time.sleep(wait)
     return ""
 
@@ -300,31 +299,3 @@ def extract_context(
         "match_query":  match_query,
         "caption_sims": caption_sims,
     }
-
-
-
-if __name__ == "__main__":
-    sample = {
-        "sentence":  "Yüksek maaşlı bir işe başlayan ablam, bir anda evin altın yumurtlayan tavuğu oldu.",
-        "phrase":    "altın yumurtlayan tavuk",
-        "is_idiomatic": True,
-        "wiktionary_def": None,
-        "candidates": [
-            {"image_id": "img1", "image_path": r"C:\Users\necip\OneDrive\Desktop\NLP Codes\images\Turkish\altın yumurtlayan tavuk\16634799208.png"}, 
-            {"image_id": "img2", "image_path": r"C:\Users\necip\OneDrive\Desktop\NLP Codes\images\Turkish\altın yumurtlayan tavuk\47911094135.png"},
-            {"image_id": "img1", "image_path": r"C:\Users\necip\OneDrive\Desktop\NLP Codes\images\Turkish\altın yumurtlayan tavuk\60724405930.png"}, 
-            {"image_id": "img2", "image_path": r"C:\Users\necip\OneDrive\Desktop\NLP Codes\images\Turkish\altın yumurtlayan tavuk\80371640998.png"},
-            {"image_id": "img1", "image_path": r"C:\Users\necip\OneDrive\Desktop\NLP Codes\images\Turkish\altın yumurtlayan tavuk\99148916362.png"}, 
-        ],
-    }
-
-    ctx = extract_context(
-        sentence      = sample["sentence"],
-        phrase        = sample["phrase"],
-        candidates    = sample["candidates"],
-        is_idiomatic  = sample["is_idiomatic"],
-        wiktionary_def= sample["wiktionary_def"],
-    )
-
-    print(f"\n{'='*60}")
-    print(json.dumps(ctx, indent=2))

@@ -185,18 +185,3 @@ def detect_idiom(sentence: str, phrase: str, lang: str) -> dict:
         f"Blended={blended:.2f} → {'IDIOMATIC' if is_idiomatic else 'LITERAL'}"
     )
     return result
-
-
-if __name__ == "__main__":
-    test_cases = csv.reader(open("output.csv", newline="", encoding="utf-8"))
-    op = {}
-    for sent, phrase in test_cases:
-        print(f"\n{'='*60}")
-        print(f"Sentence : {sent}")
-        print(f"Phrase   : {phrase}")
-        r = detect_idiom(sent, phrase)
-        print(f"Result   : {json.dumps(r, indent=2)}")
-        op[(sent, phrase)] = r
-    csv.writer(open("idiom_detection_results.csv", "w", newline="", encoding="utf-8")).writerows(
-        [("sentence", "phrase", "is_idiomatic", "confidence", "method", "wiktionary_def")] +
-        [(s, p, r["is_idiomatic"], r["confidence"], r["method"], r["wiktionary_def"]) for (s, p), r in op.items()])

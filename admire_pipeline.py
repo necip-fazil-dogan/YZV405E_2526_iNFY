@@ -103,7 +103,6 @@ def process_row(row: dict, image_dir: str, lang: str) -> tuple[str, dict]:
 
     id_to_name = {c["image_id"]: c["image_name"] for c in candidates}
     ordered_names = [id_to_name[r["image_id"]] for r in ranked]
-    # Girdi formatıyla aynı: tek tırnaklı Python liste string'i (JSON değil; TSV kaçışı bozulmasın)
     result = str(ordered_names)
     print(f"[Result] {result}")
 
@@ -196,7 +195,6 @@ def main():
             done += 1
             print(f"\r  ✓ {done}/{len(rows)} completed", end="", flush=True)
 
-    # 2. Detaylı JSON Raporunu Yazdır (YENİ EKLENEN KISIM)
     debug_file_path = out_path.with_name(out_path.stem + "_rapor.json")
     with open(debug_file_path, "w", encoding="utf-8") as f:
         json.dump(debug_logs, f, indent=2, ensure_ascii=False)

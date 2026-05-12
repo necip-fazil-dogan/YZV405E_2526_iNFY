@@ -5,8 +5,8 @@ import requests
 from pathlib import Path
 
 LAMBDA_PENALTY   = 1.5
-LITERAL_BONUS    = 0.8   # GroundingDINO bonus for literal sentences
-CAPTION_WEIGHT   = 0.5   # BGE-M3 caption similarity bonus weight
+LITERAL_BONUS    = 0.8   
+CAPTION_WEIGHT   = 0.5  
 OPENROUTER_API_KEY = os.environ.get("OPENROUTER_API_KEY", "")
 MODEL            = "qwen/qwen2.5-vl-72b-instruct"
 API_URL          = "https://openrouter.ai/api/v1/chat/completions"
@@ -186,7 +186,6 @@ def run_tournament_v2(
         tie_epsilon  = (n - idx) * 0.001
 
         if is_idiomatic:
-            # Literal nesneleri gösteren görseller cezalandırılır
             score = (
                 w
                 - (LAMBDA_PENALTY * dino_score)
@@ -195,7 +194,6 @@ def run_tournament_v2(
             )
             penalty_display = round(dino_score, 3)
         else:
-            # Literal nesneleri gösteren görseller ödüllendirilir
             score = (
                 w
                 + (LITERAL_BONUS * dino_score)
@@ -217,44 +215,3 @@ def run_tournament_v2(
 
     results.sort(key=lambda x: (x["score"], x["wins"]), reverse=True)
     return results, match_log
-
-
-
-if __name__ == "__main__":
-    import json
-
-    test_query = "Ablam evin en önemli gelir kaynağı oldu. Atmosphere: Wealth, relief, and pride."
-    test_dir   = r"C:\Users\necip\OneDrive\Desktop\NLP Codes\images\Turkish\altın yumurtlayan tavuk"
-
-    test_candidates = [
-        {"image_id": "img1", "image_name": "60724405930.png", "caption": "An older man lying on a couch covered with a large amount of money."},
-        {"image_id": "img2", "image_name": "47911094135.png", "caption": "A cartoon man's face with dollar signs in his eyes and gold coins surrounding him."},
-        {"image_id": "img3", "image_name": "16634799208.png", "caption": "A close-up of a woman's hand with an orange gemstone ring."},
-        {"image_id": "img4", "image_name": "80371640998.png", "caption": "A cartoon chicken with orange and white feathers sitting on golden eggs."},
-        {"image_id": "img5", "image_name": "99148916362.png", "caption": "A stylized cartoon chicken with a ruffled white and orange body."},
-    ]
-
-    penalties    = {"img1": 0.0, "img2": 0.0, "img3": 0.0, "img4": 0.0, "img5": 0.0}
-    caption_sims = {"img1": 0.0, "img2": 0.0, "img3": 0.0, "img4": 0.0, "img5": 0.0}
-
-    print("\n" + "="*60)
-    print("TURNUVA BAŞLIYOR (Qwen2.5-VL-72B via OpenRouter)")
-    print("="*60)
-
-    results, match_log = run_tournament_v2(
-        candidates   = test_candidates,
-        match_query  = test_query,
-        penalties    = penalties,
-        caption_sims = caption_sims,
-        is_idiomatic = True,
-        image_dir    = test_dir,
-    )
-
-    print(f"\n{'='*60}")
-    print("MAÇ LOGLARI:")
-    for log in match_log:
-        print(f"  {log['a']} vs {log['b']} → {log['winner']}")
-
-    print(f"\n{'='*60}")
-    print("FİNAL SIRALAMASI:")
-    print(json.dumps(results, indent=2, ensure_ascii=False))
