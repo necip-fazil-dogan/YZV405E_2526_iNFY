@@ -19,7 +19,7 @@ TEXT_MODEL         = "meta-llama/llama-4-scout-17b-16e-instruct"
 OPENROUTER_URL     = "https://openrouter.ai/api/v1/chat/completions"
 
 device = "cuda" if torch.cuda.is_available() else "cpu"
-print(f"[GroundingDINO] Model {device.upper()} is starting...")
+print(f"[GroundingDINO] Model {device.upper()} initialized...")
 
 try:
     dino_processor = AutoProcessor.from_pretrained("IDEA-Research/grounding-dino-base")
@@ -81,44 +81,8 @@ def paraphrase_sentence(sentence: str, phrase: str, lang: str) -> str:
         "Keep it short — just a few words or one sentence."
         f"CRITICAL: ALWAYS REPLY IN THE SOURCE LANGUAGE ({lang.upper()}). DO NOT USE ENGLISH UNLESS THE SOURCE IS ENGLISH."
     )
-    few_shot_examples = ""
-    lang_upper = lang.upper()
-    
-    if lang_upper == "TR":
-        few_shot_examples = (
-            "\nExample Guideline:\n"
-            "Sentence: 'O kadar yorgunum ki ayaklarıma kara sular indi.'\n"
-            "Phrase: 'ayaklarına kara sular inmek'\n"
-            "Answer: 'Çok yoruldum.'\n\n"
-            "Now do the following:\n"
-        )
-    elif lang_upper == "UZ":
-        few_shot_examples = (
-            "\nExample Guideline:\n"
-            "Sentence: 'Imtihondan yiqilganini eshitib, tarvuzi qo'ltig'idan tushdi.'\n"
-            "Phrase: 'tarvuzi qo'ltig'idan tushdi'\n"
-            "Answer: 'Juda xafa bo'ldi.'\n\n"
-            "Now do the following:\n"
-        )
-    elif lang_upper == "IG":
-        few_shot_examples = (
-            "\nExample Guideline:\n"
-            "Sentence: 'Nwa a nwere ntị ike, anaghị anụ ihe.'\n"
-            "Phrase: 'ntị ike'\n"
-            "Answer: 'Isi ike.'\n\n"
-            "Now do the following:\n"
-        )
-    elif lang_upper == "KA":
-        few_shot_examples = (
-            "\nExample Guideline:\n"
-            "Sentence: 'ნუ ცდილობ ჩემთვის თვალებში ნაცრის შეყრას, სიმართლე ვიცი.'\n"
-            "Phrase: 'თვალებში ნაცრის შეყრა'\n"
-            "Answer: 'მოტყუება.'\n\n"
-            "Now do the following:\n"
-        )
 
     user = (
-        f'{few_shot_examples}'
         f'Sentence: "{sentence}"\n'
         f'The phrase "{phrase}" is used idiomatically. '
         "Paraphrase this sentence with the same meaning but different words. "

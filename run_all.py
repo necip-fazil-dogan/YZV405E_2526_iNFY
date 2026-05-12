@@ -41,7 +41,7 @@ for lang in LANGUAGES:
     out  = f"{OUTPUT_DIR}/submission_{lang[1]}.tsv"
 
     if not Path(tsv).exists():
-        print(f"[WARN] {tsv} bulunamadi, atlaniyor...")
+        print(f"[WARN] {tsv} not found, skipping...")
         continue
 
     print(f"\n{'='*50}")
