@@ -1,9 +1,7 @@
 import os
+import sys
 import subprocess
 from pathlib import Path
-
-
-os.environ["OPENROUTER_API_KEY"] = "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"
 
 
 THREADS = 10 
@@ -31,6 +29,13 @@ LANGUAGES = [
 TSV_DIR    = "."        
 IMAGE_DIR  = "images"  
 OUTPUT_DIR = "output"  
+
+
+if not os.environ.get("OPENROUTER_API_KEY"):
+    print("Error: OPENROUTER_API_KEY is not set.")
+    print("PowerShell example:")
+    print("  $env:OPENROUTER_API_KEY='your_api_key_here'")
+    sys.exit(1)
 
 
 Path(OUTPUT_DIR).mkdir(exist_ok=True)
