@@ -1,37 +1,41 @@
 import os
+import sys
 import subprocess
 from pathlib import Path
-
-
-os.environ["GROQ_API_KEY"]       = "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"   
-os.environ["OPENROUTER_API_KEY"] = "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"   
 
 
 THREADS = 10 
 
 
 LANGUAGES = [
-    ["Turkish","TR"],
-    #["Chinese","ZH"],
-    ["Georgian","KA"],
-    #["Greek","EL"],
-    ["Igbo","IG"],
-    ["Kazakh","KK"],
-    #["Norwegian","NO"],
-    #["Portuguese-Brazil","PT-BR"],
-    #["Portuguese-Portugal","PT-PT"],
-    #["Russian","RU"],
-    #["Serbian","SR"],
-    #["Slovak","SK"],
-    #["Slovenian","SL"],
-    #["Spanish-Ecuador","ES-EC"],
-    #["Uzbek","UZ"]
+    ["Turkish", "TR"],
+    # ["Georgian", "KA"],
+    # ["Igbo", "IG"],
+    # ["Kazakh", "KK"],
+    # ["Chinese", "ZH"],
+    # ["Greek", "EL"],
+    # ["Norwegian", "NO"],
+    # ["Portuguese-Brazil", "PT-BR"],
+    # ["Portuguese-Portugal", "PT-PT"],
+    # ["Russian", "RU"],
+    # ["Serbian", "SR"],
+    # ["Slovak", "SK"],
+    # ["Slovenian", "SL"],
+    # ["Spanish-Ecuador", "ES-EC"],
+    # ["Uzbek", "UZ"],
 ]
 
 
 TSV_DIR    = "."        
 IMAGE_DIR  = "images"  
 OUTPUT_DIR = "output"  
+
+
+if not os.environ.get("OPENROUTER_API_KEY"):
+    print("Error: OPENROUTER_API_KEY is not set.")
+    print("PowerShell example:")
+    print("  $env:OPENROUTER_API_KEY='your_api_key_here'")
+    sys.exit(1)
 
 
 Path(OUTPUT_DIR).mkdir(exist_ok=True)
@@ -42,7 +46,7 @@ for lang in LANGUAGES:
     out  = f"{OUTPUT_DIR}/submission_{lang[1]}.tsv"
 
     if not Path(tsv).exists():
-        print(f"⚠️  {tsv} bulunamadı, atlanıyor...")
+        print(f"[WARN] {tsv} not found, skipping...")
         continue
 
     print(f"\n{'='*50}")
@@ -59,14 +63,14 @@ for lang in LANGUAGES:
          "--image_dir", imgs,
          "--output",    out,
          "--threads",   str(THREADS),
-         "--lang", lang[1]],env=os.environ,
+         "--lang", lang[1]], env=os.environ,
          
     )
 
     if result.returncode == 0:
-        print(f"✅ {lang[0]} ({lang[1]}) completed → {out}")
+        print(f"[OK] {lang[0]} ({lang[1]}) completed -> {out}")
     else:
-        print(f"❌ {lang[0]} ({lang[1]}) failed, continuing...")
+        print(f"[FAIL] {lang[0]} ({lang[1]}) failed, continuing...")
 
-print(f"\n🎉 Done! Output files: {OUTPUT_DIR}/")
+print(f"\nDone. Output files: {OUTPUT_DIR}/")
 

@@ -1,0 +1,17 @@
+images/
+*.tsv
+*.json
+*.zip
+
+__pycache__/
+*.pyc
+.pytest_cache/
+output/
+.env
+.cursorindexingignore
+.specstory/
+.specstory/**
+.specstory/**/**
+.specstory/**/**/**
+.specstory/**/**/**/**
+.specstory/**/**/**/**/**

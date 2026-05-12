@@ -2,16 +2,15 @@ import os
 import json
 import math
 import requests
-from groq import Groq
 from sentence_transformers import SentenceTransformer
 import numpy as np
 import time
 import csv
 
 
-
-
-GROQ_API_KEY = "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"
+OPENROUTER_API_KEY = os.environ.get("OPENROUTER_API_KEY", "")
+TEXT_MODEL         = "meta-llama/llama-4-scout-17b-16e-instruct"
+OPENROUTER_URL     = "https://openrouter.ai/api/v1/chat/completions"
 
 def get_dynamic_threshold(lang: str) -> float:
     lang = lang.upper()
@@ -21,28 +20,41 @@ def get_dynamic_threshold(lang: str) -> float:
         return 0.40  
     return 0.45  
 
-def _groq_call(system: str, user: str, max_tokens: int = 50) -> str:
-    for attempt in range(10): 
+def _openrouter_text_call(system: str, user: str, max_tokens: int = 50) -> str:
+    if not OPENROUTER_API_KEY:
+        raise EnvironmentError("OPENROUTER_API_KEY is not set.")
+
+    headers = {
+        "Authorization": f"Bearer {OPENROUTER_API_KEY}",
+        "Content-Type":  "application/json",
+        "HTTP-Referer":  "https://github.com/admire-pipeline",
+    }
+    payload = {
+        "model": TEXT_MODEL,
+        "messages": [
+            {"role": "system", "content": system},
+            {"role": "user",   "content": user},
+        ],
+        "max_tokens":  max_tokens,
+        "temperature": 0.0,
+    }
+
+    for attempt in range(10):
         try:
-            client = Groq(api_key=GROQ_API_KEY)
-            resp = client.chat.completions.create(
-                model="meta-llama/llama-4-scout-17b-16e-instruct",
-                messages=[
-                    {"role": "system", "content": system},
-                    {"role": "user", "content": user},
-                ],
-                max_tokens=max_tokens,
-                temperature=0.0,
-            )
-            time.sleep(2)  
-            return resp.choices[0].message.content.strip()
-        except Exception as e:
-            if "429" in str(e):
-                wait = 2 * (attempt + 1)  
-                print(f"[Groq] Rate limit, {wait}s bekleniyor...")
+            r = requests.post(OPENROUTER_URL, headers=headers, json=payload, timeout=60)
+            if r.status_code == 429:
+                wait = 2 * (attempt + 1)
+                print(f"[OpenRouter] Rate limit, {wait}s bekleniyor...")
                 time.sleep(wait)
-            else:
-                raise
+                continue
+            r.raise_for_status()
+            return r.json()["choices"][0]["message"]["content"].strip()
+        except requests.exceptions.HTTPError:
+            raise
+        except Exception as e:
+            wait = 2 * (attempt + 1)
+            print(f"[OpenRouter] Hata ({e}), {wait}s sonra tekrar...")
+            time.sleep(wait)
     return ""
 
 
@@ -66,7 +78,7 @@ def llama_physically_possible(sentence: str, phrase: str) -> bool:
     f'Is "{phrase}" physically and literally occurring in this sentence '
     f'with real entities? Answer only yes or no.'
     )
-    answer = _groq_call(system, user, max_tokens=5).lower()
+    answer = _openrouter_text_call(system, user, max_tokens=5).lower()
     return answer.startswith("y")
 
 
@@ -92,7 +104,7 @@ def llama_literal_or_idiomatic_score(sentence: str, phrase: str) -> float:
     f'If a real physical event/object is described → lean toward literal.\n'
     f'If the meaning is abstract or metaphorical → lean toward idiomatic.'
 )
-    answer = _groq_call(system, user, max_tokens=10).lower()
+    answer = _openrouter_text_call(system, user, max_tokens=10).lower()
 
     score_map = {
         "definitely idiomatic": 1.0,
@@ -173,18 +185,3 @@ def detect_idiom(sentence: str, phrase: str, lang: str) -> dict:
         f"Blended={blended:.2f} → {'IDIOMATIC' if is_idiomatic else 'LITERAL'}"
     )
     return result
-
-
-if __name__ == "__main__":
-    test_cases = csv.reader(open("output.csv", newline="", encoding="utf-8"))
-    op = {}
-    for sent, phrase in test_cases:
-        print(f"\n{'='*60}")
-        print(f"Sentence : {sent}")
-        print(f"Phrase   : {phrase}")
-        r = detect_idiom(sent, phrase)
-        print(f"Result   : {json.dumps(r, indent=2)}")
-        op[(sent, phrase)] = r
-    csv.writer(open("idiom_detection_results.csv", "w", newline="", encoding="utf-8")).writerows(
-        [("sentence", "phrase", "is_idiomatic", "confidence", "method", "wiktionary_def")] +
-        [(s, p, r["is_idiomatic"], r["confidence"], r["method"], r["wiktionary_def"]) for (s, p), r in op.items()])
